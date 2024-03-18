@@ -1,0 +1,7 @@
+.python-version
+notes.txt
+__pycache__/
+*.ipynb
+C10k-better/
+lightning_logs/
+wandb/
