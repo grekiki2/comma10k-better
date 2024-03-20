@@ -11,11 +11,14 @@ DATA_PATH = Path("~/Desktop/segnet/comma10k").expanduser()
 CLASS_VALUES = [41,  76, 124, 161, 90]
 
 class C10kDataModule(L.LightningDataModule):
-    def __init__(self, batch_size=32, height=437, width=582):
+    def __init__(self, config):
         super().__init__()
-        self.batch_size = batch_size
-        self.height = height
-        self.width = width
+        self.batch_size = config["batch_size"]
+        self.height = config["height"]
+        self.width = config["width"]
+        self.lr = config["lr"]
+        self.backbone = config["backbone"]
+        self.augmentation_level = config["augmentation_level"]
     
     def setup(self, stage=None):
         print(f"Setupping data for stage {stage}...")
@@ -26,8 +29,8 @@ class C10kDataModule(L.LightningDataModule):
         train_masks = [x for x in masks if not x.name.endswith("9.png")]
         valid_imgs = [x for x in imgs if x.name.endswith("9.png")]
         valid_masks = [x for x in masks if x.name.endswith("9.png")]
-        self.train_ds = DatasetWrapper(train_imgs, train_masks, get_transforms(self.height, self.width, "hard"))
-        self.val_ds = DatasetWrapper(valid_imgs, valid_masks, get_valid_transforms(self.height, self.width))
+        self.train_ds = DatasetWrapper(train_imgs, train_masks, get_transforms(self.height, self.width, self.augmentation_level), self.backbone)
+        self.val_ds = DatasetWrapper(valid_imgs, valid_masks, get_valid_transforms(self.height, self.width), self.backbone)
 
     def train_dataloader(self):
         return DataLoader(self.train_ds, batch_size=self.batch_size, num_workers=16, shuffle=True, drop_last=True, pin_memory=True)
@@ -47,7 +50,7 @@ def get_scale_transform(height: int, width: int):
                 pad_to_multiple(width),
                 border_mode=cv2.BORDER_CONSTANT,
                 value=0,
-                mask_value=-100, # cross entropy loss ignores -100
+                mask_value=-100, # cross entropy loss ignores 0
             ),
         ]
     )
@@ -62,7 +65,7 @@ def get_transforms(height: int, width: int, level: str):
                     pad_to_multiple(width),
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
-                    mask_value=0,
+                    mask_value=-100,
                 ),
                 A.HorizontalFlip(p=0.5),
                 A.GaussNoise(p=0.2),
@@ -101,7 +104,7 @@ def get_transforms(height: int, width: int, level: str):
                     pad_to_multiple(width),
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
-                    mask_value=0,
+                    mask_value=-100,
                 ),
                 A.HorizontalFlip(p=0.5),
                 A.GaussNoise(p=0.2),
@@ -163,7 +166,7 @@ def get_transforms(height: int, width: int, level: str):
                     p=0.5,
                 ),
                 A.Resize(height=height, width=width, p=1.0),
-                A.CoarseDropout(p=0.3, mask_fill_value=-100),
+                A.CoarseDropout(p=0.3, mask_fill_value=0),
                 A.PadIfNeeded(
                     pad_to_multiple(height),
                     pad_to_multiple(width),
@@ -182,7 +185,7 @@ def get_transforms(height: int, width: int, level: str):
                     pad_to_multiple(width),
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
-                    mask_value=0,
+                    mask_value=-100,
                 ),
                 A.HorizontalFlip(p=0.5),
                 A.GaussNoise(p=0.2),
@@ -253,7 +256,7 @@ def get_transforms(height: int, width: int, level: str):
                     p=0.4,
                 ),
                 A.Resize(height=height, width=width, p=1.0),
-                A.CoarseDropout(p=0.3, mask_fill_value=-100),
+                A.CoarseDropout(p=0.3, mask_fill_value=0),
             ],
             p=1.0,
         )
@@ -264,12 +267,12 @@ def get_valid_transforms(height: int, width: int):
     return get_scale_transform(height, width)
 
 class DatasetWrapper(Dataset):
-    def __init__(self, img_paths, mask_paths, transform):
+    def __init__(self, img_paths, mask_paths, transform, backbone):
         assert len(img_paths) == len(mask_paths), "Number of images and masks do not match"
         self.img_paths = img_paths
         self.mask_paths = mask_paths
         self.transform = transform
-        self.preprocess = smp.encoders.get_preprocessing_fn("efficientnet-b3")
+        self.preprocess = smp.encoders.get_preprocessing_fn(backbone)
     
     def __len__(self):
         return len(self.img_paths)

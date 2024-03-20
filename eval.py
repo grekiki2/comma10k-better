@@ -8,30 +8,22 @@ torch.set_float32_matmul_precision('high')
 from model import Model
 from data import C10kDataModule
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
+from lightning.pytorch.callbacks import StochasticWeightAveraging
 
 
-def pretraining(config:Dict[str, Any]):
+def eval(config:Dict[str, Any]):
     mnist_data = C10kDataModule(config)
     mnist_data.setup()
-    if config["checkpoint_path"] is not None:
-        model = Model.load_from_checkpoint(config["checkpoint_path"], config=config)
-    else:
-        model = Model(config)
+    model = Model.load_from_checkpoint(config["checkpoint_path"], config=config)
 
-    if config["no_log"]:
-        wandb_logger = None
-    else:
-        wandb_logger = WandbLogger(project="C10k-better")
-
-    trainer = L.Trainer(max_epochs=config["epochs"],
+    trainer = L.Trainer(max_epochs=1,
                         accelerator="gpu",
-                        logger=wandb_logger,
-                        log_every_n_steps=10,
                         precision="16-mixed",
                         benchmark=True,
     )
 
-    trainer.fit(model, datamodule=mnist_data)
+    trainer.validate(model, datamodule=mnist_data)
 
 
 if __name__ == "__main__":
@@ -39,14 +31,10 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
-    parser.add_argument("--lr", type=float, required=True)
-    parser.add_argument("--epochs", type=int, required=True)
-    parser.add_argument("--warmup_epochs", type=int, default=0)
-    parser.add_argument("--checkpoint_path", type=str, default=None)
-    parser.add_argument("--no_log", action="store_true", help="Disable logging (for debugging)")
+    parser.add_argument("--checkpoint_path", type=str, required=True)
     parser.add_argument("--backbone", type=str, default="efficientnet-b3", help="backbone for the model, for example resnet50")
     parser.add_argument("--augmentation_level", type=str, default="hard", help="augmentation level for the data, check data.py")
     parser.add_argument("--TTA", action="store_true", help="whether to use test time augmentation")
 
     config = vars(parser.parse_args())
-    pretraining(config)
+    eval(config)

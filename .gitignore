@@ -6,3 +6,4 @@ C10k-better/
 lightning_logs/
 wandb/
 *.png
+*.sh
