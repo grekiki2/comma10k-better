@@ -1,4 +1,3 @@
-import torch
 from torch.utils.data import Dataset, DataLoader
 import lightning as L
 import albumentations as A
@@ -21,7 +20,6 @@ class C10kDataModule(L.LightningDataModule):
         self.augmentation_level = config["augmentation_level"]
     
     def setup(self, stage=None):
-        print(f"Setupping data for stage {stage}...")
         imgs = list((DATA_PATH / "imgs").glob("*.png"))
         masks = list((DATA_PATH / "masks").glob("*.png"))
         assert len(imgs) == len(masks), "Number of images and masks do not match"

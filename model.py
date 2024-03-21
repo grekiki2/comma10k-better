@@ -51,7 +51,6 @@ class Model(L.LightningModule):
 
     def configure_optimizers(self):
         print("Configuring optimizers")
-        print(self.config['lr'])
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                         max_lr=self.config['lr'],

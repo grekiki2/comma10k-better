@@ -7,9 +7,6 @@ torch.set_float32_matmul_precision('high')
 
 from model import Model
 from data import C10kDataModule
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
-from lightning.pytorch.callbacks import StochasticWeightAveraging
 
 
 def eval(config:Dict[str, Any]):
@@ -29,6 +26,7 @@ def eval(config:Dict[str, Any]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--lr", type=float, default=0)
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
     parser.add_argument("--checkpoint_path", type=str, required=True)
