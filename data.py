@@ -164,7 +164,7 @@ def get_transforms(height: int, width: int, level: str):
                     p=0.5,
                 ),
                 A.Resize(height=height, width=width, p=1.0),
-                A.CoarseDropout(p=0.3, mask_fill_value=0),
+                A.CoarseDropout(p=0.3, mask_fill_value=-100),
                 A.PadIfNeeded(
                     pad_to_multiple(height),
                     pad_to_multiple(width),
@@ -175,28 +175,24 @@ def get_transforms(height: int, width: int, level: str):
             ],
             p=1.0,
         )
-    elif level == "hard_weather":
+    elif level == "hard_v2":
         return A.Compose(
             [
-                A.PadIfNeeded(
-                    pad_to_multiple(height),
-                    pad_to_multiple(width),
-                    border_mode=cv2.BORDER_CONSTANT,
-                    value=0,
-                    mask_value=-100,
-                ),
+                get_scale_transform(height, width),
                 A.HorizontalFlip(p=0.5),
-                A.GaussNoise(p=0.2),
+                A.GaussNoise(var_limit=120, p=0.3),
                 A.OneOf(
                     [
                         A.GridDistortion(
+                            distort_limit=0.2,
                             border_mode=cv2.BORDER_CONSTANT,
                             value=0,
                             mask_value=-100,
                             p=1.0,
                         ),
                         A.ElasticTransform(
-                            alpha_affine=10,
+                            alpha_affine=30,
+                            sigma=10,
                             border_mode=cv2.BORDER_CONSTANT,
                             value=0,
                             mask_value=-100,
@@ -212,6 +208,8 @@ def get_transforms(height: int, width: int, level: str):
                             p=1.0,
                         ),
                         A.OpticalDistortion(
+                            distort_limit=0.2,
+                            shift_limit=0.2,
                             border_mode=cv2.BORDER_CONSTANT,
                             value=0,
                             mask_value=-100,
@@ -222,41 +220,20 @@ def get_transforms(height: int, width: int, level: str):
                 ),
                 A.OneOf(
                     [
-                        A.CLAHE(p=1.0),
-                        A.RandomBrightnessContrast(p=1.0, contrast_limit=0),
-                        A.RandomGamma(p=1.0),
+                        A.CLAHE(clip_limit=10, p=1.0),
+                        A.RandomBrightnessContrast(p=1.0, brightness_limit=(-0.4, 0.2), contrast_limit=0),
+                        A.RandomGamma(gamma_limit=(65, 135), p=1.0),
                         A.ISONoise(p=1.0),
-                    ],
-                    p=0.5,
-                ),
-                A.OneOf(
-                    [
                         A.Sharpen(p=1.0),
-                        A.Blur(blur_limit=3, p=1.0),
-                        A.MotionBlur(blur_limit=3, p=1.0),
-                    ],
-                    p=0.5,
-                ),
-                A.OneOf(
-                    [
-                        A.RandomBrightnessContrast(p=1.0, brightness_limit=0),
                         A.HueSaturationValue(p=1.0),
                     ],
                     p=0.5,
                 ),
-                A.OneOf(
-                    [
-                        A.RandomFog(fog_coef_upper=0.8, p=1.0),
-                        A.RandomRain(p=1.0),
-                        A.RandomSnow(p=1.0),
-                        A.RandomSunFlare(src_radius=100, p=1.0),
-                    ],
-                    p=0.4,
-                ),
-                A.Resize(height=height, width=width, p=1.0),
-                A.CoarseDropout(p=0.3, mask_fill_value=0),
+                A.Compose([
+                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=5, max_height=30, min_width=5, max_width=30, min_holes=8),
+                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=30, max_height=height//5, min_width=30, max_width=width//5, min_holes=1, max_holes=3),
+                ], p=0.4),
             ],
-            p=1.0,
         )
     else:
         raise ValueError
