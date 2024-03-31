@@ -2,25 +2,40 @@ import torch, torch.nn as nn, torch.nn.functional as F
 import segmentation_models_pytorch as smp
 
 import lightning as L
+from transformers import SegformerForSemanticSegmentation
+
 
 def acc_fn(out, mask):
     valid_mask_count = (mask != -100).sum()
     return (torch.argmax(out, dim=1) == mask).float().sum() / valid_mask_count
+id_to_label = {
+    0: 'road',
+    1: 'lane_marking',
+    2: 'undrivable',
+    3: 'movable',
+    4: 'my_car',
+}
+
+label_to_id = {v: k for k, v in id_to_label.items()}
 
 class Model(L.LightningModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.save_hyperparameters()
-        self.model = smp.DeepLabV3Plus(
-            encoder_name=config["backbone"],
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=5,
-        )
+        self.model = SegformerForSemanticSegmentation.from_pretrained(
+            f"nvidia/{config['backbone']}", 
+            return_dict=False, 
+            num_labels=5,
+            id2label=id_to_label,
+            label2id=label_to_id,
+            ignore_mismatched_sizes=True,
+)
     
     def forward(self, x):
-        return self.model(x)
+        low_res_mask = self.model(x)[0]
+        h, w = low_res_mask.shape[-2:]
+        return F.interpolate(low_res_mask, size=(4*h, 4*w), mode='bilinear', align_corners=False)
     
     def training_step(self, batch, batch_idx):
         x, y = batch
