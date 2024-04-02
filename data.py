@@ -35,7 +35,7 @@ class C10kDataModule(L.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_ds, batch_size=self.batch_size, num_workers=8) # why does this crash with 16 workers?
 
-def pad_to_multiple(x, k=32):
+def pad_to_multiple(x, k=4):
     return int(k * (np.ceil(x / k)))
 
 def get_scale_transform(height: int, width: int):
@@ -179,9 +179,13 @@ def get_transforms(height: int, width: int, level: str):
     elif level == "hard_v2":
         return A.Compose(
             [
-                get_scale_transform(height, width),
+                A.Resize(height=height, width=width),
                 A.HorizontalFlip(p=0.5),
                 A.GaussNoise(var_limit=120, p=0.3),
+                A.Compose([
+                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=5, max_height=30, min_width=5, max_width=30, min_holes=4, max_holes=12),
+                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=30, max_height=height//4, min_width=30, max_width=width//4, min_holes=1, max_holes=5),
+                ], p=0.5),
                 A.OneOf(
                     [
                         A.GridDistortion(
@@ -219,6 +223,23 @@ def get_transforms(height: int, width: int, level: str):
                     ],
                     p=0.5,
                 ),
+                A.PadIfNeeded(
+                    pad_to_multiple(height),
+                    pad_to_multiple(width)+height//2, # we add height/4 padding on both sides to ensure the edge is represented in the crop
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    mask_value=-100, # cross entropy loss ignores 0
+                ),
+                A.RandomScale(scale_limit=(-0.5, 1), p=1),
+                # Image might be to small for the crop, so we pad again
+                A.PadIfNeeded(
+                    pad_to_multiple(height),
+                    pad_to_multiple(height),
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    mask_value=-100, # cross entropy loss ignores 0
+                ),
+                A.RandomCrop(height=pad_to_multiple(height), width=pad_to_multiple(height), p=1),
                 A.OneOf(
                     [
                         A.CLAHE(clip_limit=10, p=1.0),
@@ -230,17 +251,24 @@ def get_transforms(height: int, width: int, level: str):
                     ],
                     p=0.5,
                 ),
-                A.Compose([
-                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=5, max_height=30, min_width=5, max_width=30, min_holes=8),
-                    A.CoarseDropout(p=1, mask_fill_value=-100, min_height=30, max_height=height//5, min_width=30, max_width=width//5, min_holes=1, max_holes=3),
-                ], p=0.4),
             ],
         )
     else:
         raise ValueError
 
 def get_valid_transforms(height: int, width: int):
-    return get_scale_transform(height, width)
+    return A.Compose([
+        get_scale_transform(height, width),
+        # Cropping/sliding window should probably be done within the model code for evaluation
+        # A.RandomCrop(height=pad_to_multiple(height), width=pad_to_multiple(height), p=1),
+    ])
+
+def get_transformed_image_mask(img, mask, transform):
+    while True:
+        img_rgb, mask_ids = transform(image=img, mask=mask).values()
+        pad_proportion = np.sum(mask_ids == -100) / mask_ids.size
+        if pad_proportion < 0.334:
+            return img_rgb, mask_ids
 
 class DatasetWrapper(Dataset):
     def __init__(self, img_paths, mask_paths, transform):
@@ -260,6 +288,5 @@ class DatasetWrapper(Dataset):
         conditions = [mask == v for v in CLASS_VALUES]
         mask_ids = np.select(conditions, list(range(5))) # (1164, 874) with 0-4 values. CLASS_VALUES determined by .ipynb
 
-        img_rgb, mask_ids = self.transform(image=img_rgb, mask=mask_ids).values()
-
+        img_rgb, mask_ids = get_transformed_image_mask(img_rgb, mask_ids, self.transform)
         return np.transpose(img_rgb.astype(np.float32), (2, 0, 1)), mask_ids.astype(np.int64)

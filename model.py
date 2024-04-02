@@ -37,6 +37,24 @@ class Model(L.LightningModule):
         h, w = low_res_mask.shape[-2:]
         return F.interpolate(low_res_mask, size=(4*h, 4*w), mode='bilinear', align_corners=False)
     
+    def forward_val(self, x):
+        # We do square crops during training. For inference we take the left and right crop
+        # Would be simpler but there is some overlap
+        pred_width = x.shape[-2]
+        pred_height = x.shape[-2]
+        imgs_left = x[:, :, :pred_height, :pred_width]
+        imgs_right = x[:, :, :pred_height, -pred_width:]
+        pred_left = self(imgs_left)
+        pred_right = self(imgs_right)
+        pred_left = F.interpolate(pred_left, size=(pred_height, pred_width), mode='bilinear', align_corners=False)
+        pred_right = F.interpolate(pred_right, size=(pred_height, pred_width), mode='bilinear', align_corners=False)
+        final_output = torch.zeros((x.shape[0], 5, x.shape[2], x.shape[3]), device=x.device)
+        final_output[..., :pred_width] += pred_left
+        final_output[..., -pred_width:] += pred_right
+        final_output[..., -pred_width:pred_width] /= 2 # Average the overlap
+        return final_output
+
+    
     def training_step(self, batch, batch_idx):
         x, y = batch
         out = self(x)
@@ -50,11 +68,11 @@ class Model(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
 
-        out = self(x)
+        out = self.forward_val(x)
 
         if self.config["TTA"]:
             x_flipped = torch.flip(x, [3])
-            out_flipped = self(x_flipped)
+            out_flipped = self.forward_val(x_flipped)
             out_flipped = torch.flip(out_flipped, [3])
             out = (out + out_flipped) / 2
 
@@ -66,13 +84,36 @@ class Model(L.LightningModule):
 
     def configure_optimizers(self):
         print("Configuring optimizers")
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
+        norm_params = []
+        encoder_params = []
+        decoder_params = []
+        for name, param in self.model.segformer.named_parameters():
+            if "norm" in name:
+                norm_params.append(param)
+            else:
+                encoder_params.append(param)
+        for name, param in self.model.decode_head.named_parameters():
+            if "norm" in name:
+                norm_params.append(param)
+            else:
+                decoder_params.append(param)
+        optimizer_groups = [
+            {'params': encoder_params},
+            {'params': norm_params, 'weight_decay': 0.0},
+            {'params': decoder_params, 'lr': self.config['lr'] * 10},
+        ]
+        print("Encoder params:", len(encoder_params))
+        print("Norm params:", len(norm_params))
+        print("Decoder params:", len(decoder_params))
+
+        optimizer = torch.optim.AdamW(optimizer_groups, lr=self.config['lr'], weight_decay=self.config['weight_decay'])
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                         max_lr=self.config['lr'],
                                                         # Steps per epoch is a bit harder to get since we need to wait for the dataloader to be created
                                                         steps_per_epoch = len(self.trainer.fit_loop._data_source.dataloader()),
                                                         epochs=self.config['epochs'],
-                                                        pct_start=self.config['warmup_epochs']/self.config["epochs"])
+                                                        pct_start=self.config['warmup_epochs']/self.config["epochs"],
+                                                        anneal_strategy='linear')
         return {
             'optimizer': optimizer,
             'lr_scheduler': {

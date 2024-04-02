@@ -40,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
     parser.add_argument("--lr", type=float, required=True)
+    parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--warmup_epochs", type=int, default=0)
     parser.add_argument("--checkpoint_path", type=str, default=None)
