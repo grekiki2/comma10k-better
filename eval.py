@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
     parser.add_argument("--checkpoint_path", type=str, required=True)
-    parser.add_argument("--backbone", type=str, default="efficientnet-b3", help="backbone for the model, for example resnet50")
+    parser.add_argument("--backbone", type=str, default="mit-b2", help="backbone for the model")
     parser.add_argument("--augmentation_level", type=str, default="hard", help="augmentation level for the data, check data.py")
     parser.add_argument("--TTA", action="store_true", help="whether to use test time augmentation")
 

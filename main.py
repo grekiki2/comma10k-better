@@ -25,6 +25,8 @@ def pretraining(config:Dict[str, Any]):
 
     trainer = L.Trainer(max_epochs=config["epochs"],
                         accelerator="gpu",
+                        devices=config["gpus"],
+                        sync_batchnorm=True,
                         logger=wandb_logger,
                         log_every_n_steps=10,
                         precision="16-mixed",
@@ -37,15 +39,17 @@ def pretraining(config:Dict[str, Any]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--gpus", type=int, default=1)
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
     parser.add_argument("--lr", type=float, required=True)
+    parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--warmup_epochs", type=int, default=0)
     parser.add_argument("--checkpoint_path", type=str, default=None)
     parser.add_argument("--no_log", action="store_true", help="Disable logging (for debugging)")
-    parser.add_argument("--backbone", type=str, default="efficientnet-b3", help="backbone for the model, for example resnet50")
-    parser.add_argument("--augmentation_level", type=str, default="hard", help="augmentation level for the data, check data.py")
+    parser.add_argument("--backbone", type=str, default="mit-b2", help="backbone for the model")
+    parser.add_argument("--augmentation_level", type=str, default="hard_v2", help="augmentation level for the data, check data.py")
     parser.add_argument("--TTA", action="store_true", help="whether to use test time augmentation")
 
     config = vars(parser.parse_args())
