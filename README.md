@@ -4,6 +4,8 @@ We iterate on the [comma10k-baseline](https://github.com/YassineYousfi/comma10k-
 
 Using a segformer b3 we achieve a validation loss of 0.0345 with test time augmentations
 
+<video src='out_A2_dob.mp4' width=180></video>
+
 ## Training 
 Similarly to baseline repo we use two step training
 
