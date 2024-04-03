@@ -25,6 +25,8 @@ def pretraining(config:Dict[str, Any]):
 
     trainer = L.Trainer(max_epochs=config["epochs"],
                         accelerator="gpu",
+                        devices=config["gpus"],
+                        sync_batchnorm=True,
                         logger=wandb_logger,
                         log_every_n_steps=10,
                         precision="16-mixed",
@@ -37,6 +39,7 @@ def pretraining(config:Dict[str, Any]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--gpus", type=int, default=1)
     parser.add_argument("--height", type=int, default=874)
     parser.add_argument("--width", type=int, default=1164)
     parser.add_argument("--lr", type=float, required=True)

@@ -60,8 +60,8 @@ class Model(L.LightningModule):
         out = self(x)
         loss = F.cross_entropy(out, y)
         accuracy = acc_fn(out, y)
-        self.log('train_loss', loss, on_step=True, on_epoch=True)
-        self.log('train_accuracy', accuracy, on_step=True, on_epoch=True)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, sync_dist=True)
+        self.log('train_accuracy', accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], on_step=True, on_epoch=False)
         return {'loss': loss, 'accuracy': accuracy}
     
@@ -78,8 +78,8 @@ class Model(L.LightningModule):
 
         loss = F.cross_entropy(out, y)
         accuracy = acc_fn(out, y)
-        self.log('val_loss', loss, on_step=False, on_epoch=True)
-        self.log('val_accuracy', accuracy, on_step=False, on_epoch=True)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, sync_dist=True)
+        self.log('val_accuracy', accuracy, on_step=False, on_epoch=True, sync_dist=True)
         return {'loss': loss, 'accuracy': accuracy}
 
     def configure_optimizers(self):
@@ -102,15 +102,13 @@ class Model(L.LightningModule):
             {'params': norm_params, 'weight_decay': 0.0},
             {'params': decoder_params, 'lr': self.config['lr'] * 10},
         ]
-        print("Encoder params:", len(encoder_params))
-        print("Norm params:", len(norm_params))
-        print("Decoder params:", len(decoder_params))
 
         optimizer = torch.optim.AdamW(optimizer_groups, lr=self.config['lr'], weight_decay=self.config['weight_decay'])
+        devices = self.config["gpus"]
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                         max_lr=self.config['lr'],
                                                         # Steps per epoch is a bit harder to get since we need to wait for the dataloader to be created
-                                                        steps_per_epoch = len(self.trainer.fit_loop._data_source.dataloader()),
+                                                        steps_per_epoch = (len(self.trainer.fit_loop._data_source.dataloader())+devices-1)//devices,
                                                         epochs=self.config['epochs'],
                                                         pct_start=self.config['warmup_epochs']/self.config["epochs"],
                                                         anneal_strategy='linear')
